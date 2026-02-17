@@ -239,7 +239,7 @@ def init_db():
 init_db()
 
 # ============================================
-# CORREÇÃO 1: REMOVIDO font-family DO HTML TEMPLATE
+# CORREÇÃO 1: HTML TEMPLATE SEM font-family E COM PLACEHOLDERS CORRETOS
 # ============================================
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html>
@@ -247,96 +247,96 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <meta charset="UTF-8">
     <title>Prontuário PsicoBot</title>
     <style>
-        body { 
+        body {{ 
             margin: 40px; 
             color: #333; 
             line-height: 1.6; 
-        }
-        .header { 
+        }}
+        .header {{ 
             text-align: center; 
             color: #667eea; 
             border-bottom: 3px solid #667eea; 
             padding-bottom: 20px; 
             margin-bottom: 30px; 
-        }
-        .section { 
+        }}
+        .section {{ 
             margin: 30px 0; 
-        }
-        .section h2 { 
+        }}
+        .section h2 {{ 
             color: #667eea; 
             border-left: 5px solid #667eea; 
             padding-left: 15px; 
-        }
-        .info-box { 
+        }}
+        .info-box {{ 
             background: #f8f9fa; 
             padding: 20px; 
             border-radius: 10px; 
             margin: 15px 0; 
             border: 1px solid #e9ecef; 
-        }
-        .info-item { 
+        }}
+        .info-item {{ 
             margin: 10px 0; 
             padding: 8px 0; 
             border-bottom: 1px solid #e9ecef; 
-        }
-        .info-item:last-child { 
+        }}
+        .info-item:last-child {{ 
             border-bottom: none; 
-        }
-        .alert { 
+        }}
+        .alert {{ 
             background: #fee; 
             border-left: 5px solid #e74c3c; 
             padding: 20px; 
             color: #c0392b; 
             margin: 20px 0; 
             border-radius: 5px; 
-        }
-        table { 
+        }}
+        table {{ 
             width: 100%; 
             border-collapse: collapse; 
             margin: 20px 0; 
             box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
-        }
-        th, td { 
+        }}
+        th, td {{ 
             border: 1px solid #ddd; 
             padding: 15px; 
             text-align: left; 
-        }
-        th { 
+        }}
+        th {{ 
             background: #667eea; 
             color: white; 
             font-weight: 600; 
-        }
-        tr:nth-child(even) { 
+        }}
+        tr:nth-child(even) {{ 
             background: #f8f9fa; 
-        }
-        .footer { 
+        }}
+        .footer {{ 
             margin-top: 50px; 
             font-size: 11px; 
             color: #666; 
             text-align: center; 
             border-top: 2px solid #e9ecef; 
             padding-top: 20px; 
-        }
-        .badge { 
+        }}
+        .badge {{ 
             display: inline-block; 
             padding: 5px 15px; 
             border-radius: 20px; 
             font-size: 14px; 
             font-weight: bold; 
             margin: 5px; 
-        }
-        .badge-primary { 
+        }}
+        .badge-primary {{ 
             background: #667eea; 
             color: white; 
-        }
-        .badge-warning { 
+        }}
+        .badge-warning {{ 
             background: #f39c12; 
             color: white; 
-        }
-        .badge-danger { 
+        }}
+        .badge-danger {{ 
             background: #e74c3c; 
             color: white; 
-        }
+        }}
     </style>
 </head>
 <body>
@@ -813,15 +813,19 @@ def main():
                 resposta = st.text_area("Sua resposta:", height=120, key=field, 
                                        placeholder="Digite aqui...")
             
+            # ============================================
+            # CORREÇÃO 3: BOTÃO PRÓXIMO COM KEY ÚNICA PARA CADA ETAPA
+            # ============================================
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
-                if st.button("Próximo ➜", type="primary"):
+                if st.button("Próximo ➜", type="primary", key=f"btn_{field}_{st.session_state.step}"):
                     if resposta:
                         st.session_state.dados[field] = resposta
                         st.session_state.step += 1
                         st.rerun()
                     else:
                         st.error("Por favor, preencha a resposta para continuar.")
+            # ============================================
     
     else:
         # Resultado
@@ -831,7 +835,7 @@ def main():
             diagnostico = simula_diagnostico(st.session_state.dados)
             
             # ============================================
-            # CORREÇÃO 3: SALVAR NO BANCO APÓS GERAR DIAGNÓSTICO
+            # CORREÇÃO 4: SALVAR NO BANCO APÓS GERAR DIAGNÓSTICO
             # ============================================
             salvar_avaliacao(
                 st.session_state.user_id,
