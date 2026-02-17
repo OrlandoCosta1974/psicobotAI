@@ -410,6 +410,23 @@ def generate_html_pdf(dados, diagnostico, user_id):
     sev_class = 'warning' if sev == 'Moderada' else 'danger' if sev == 'Grave' else 'primary'
     enc = diagnostico.get('recomendacao', 'Acompanhamento psicológico')
     
+    # ============================================
+    # CORREÇÃO: FORMATAR DIAGNÓSTICO COMO HTML EM VEZ DE JSON
+    # ============================================
+    # Cria HTML formatado para o diagnóstico detalhado
+    diag_html = f"""
+    <p><strong>Categoria:</strong> {diagnostico.get('categoria', 'Não especificado')}</p>
+    <p><strong>Severidade:</strong> {diagnostico.get('severidade', 'Não especificado')}</p>
+    <p><strong>Risco:</strong> {diagnostico.get('risco', 'Ausente')}</p>
+    <p><strong>Recomendação:</strong> {diagnostico.get('recomendacao', 'Não especificado')}</p>
+    <p><strong>Estratégias Recomendadas:</strong></p>
+    <ul>
+    """
+    for estrategia in diagnostico.get('estrategias', []):
+        diag_html += f"<li>{estrategia}</li>\n"
+    diag_html += "</ul>"
+    # ============================================
+    
     html_content = HTML_TEMPLATE.format(
         user_id=user_id,
         data=datetime.now().strftime('%d/%m/%Y %H:%M'),
@@ -417,7 +434,7 @@ def generate_html_pdf(dados, diagnostico, user_id):
         categoria=cat,
         severidade=sev,
         severidade_class=sev_class,
-        diagnostico=json.dumps(diagnostico, indent=2, ensure_ascii=False),
+        diagnostico=diag_html,  # Agora envia HTML formatado em vez de JSON
         encaminhamento=enc,
         ano=datetime.now().year
     )
