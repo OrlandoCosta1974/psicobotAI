@@ -1,4 +1,4 @@
-# psicobot_app.py - Versão com IA real (Groq)
+# psicobot_app.py - Versão com IA real (Groq) + DEBUG
 
 import streamlit as st
 import sqlite3
@@ -860,7 +860,70 @@ def salvar_avaliacao(user_id, dados, diagnostico):
         return False
 
 
+# ============================================
+# FUNÇÃO MAIN COM DEBUG INCLUÍDO
+# ============================================
 def main():
+    # ============================================
+    # DEBUG: Verificar se a chave da API está sendo lida
+    # ============================================
+    st.markdown("---")
+    st.subheader("🔍 Debug da API Key")
+    
+    # Tenta pegar de várias formas
+    try:
+        api_key_secrets = st.secrets.get("GROQ_API_KEY") if hasattr(st.secrets, 'get') else None
+    except:
+        api_key_secrets = None
+    
+    api_key_env = os.getenv("GROQ_API_KEY")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**Método 1: st.secrets**")
+        if api_key_secrets:
+            st.success(f"✅ Encontrada!")
+            st.code(f"{api_key_secrets[:20]}...", language="text")
+        else:
+            st.error("❌ Não encontrada")
+    
+    with col2:
+        st.write("**Método 2: os.getenv**")
+        if api_key_env:
+            st.success(f"✅ Encontrada!")
+            st.code(f"{api_key_env[:20]}...", language="text")
+        else:
+            st.error("❌ Não encontrada")
+    
+    # Mostra o que está disponível em st.secrets
+    st.write("**Secrets disponíveis:**")
+    try:
+        # Tenta acessar como dicionário
+        if hasattr(st.secrets, '_secrets'):
+            secrets_dict = dict(st.secrets._secrets)
+        else:
+            # Tenta listar diretamente
+            secrets_dict = {k: v for k, v in st.secrets.items()} if hasattr(st.secrets, 'items') else {}
+        
+        if secrets_dict:
+            st.json({k: "✅ Presente" for k in secrets_dict.keys()})
+        else:
+            st.warning("Nenhum secret encontrado ou não acessível")
+    except Exception as e:
+        st.error(f"Erro ao ler secrets: {str(e)}")
+        st.info("Isso é normal em algumas versões do Streamlit. A chave pode estar funcionando mesmo assim.")
+    
+    # Teste se a função de IA vai usar local ou remoto
+    st.write("**Status da análise:**")
+    if api_key_secrets or api_key_env:
+        st.success("🤖 Vai usar IA real (Groq)")
+    else:
+        st.warning("📋 Vai usar análise local (offline)")
+    
+    st.markdown("---")
+    # ============================================
+    
     # Container principal com fundo escuro
     st.markdown('<div class="main-container">', unsafe_allow_html=True)
     
@@ -958,9 +1021,7 @@ def main():
         # Resultado
         st.success("✅ Triagem concluída com sucesso!")
         
-        # ============================================
         # AQUI É FEITA A ANÁLISE COM IA REAL (GROQ)
-        # ============================================
         with st.spinner("Analisando padrões clínicos..."):
             diagnostico = analisar_com_ia(st.session_state.dados)
             
@@ -976,7 +1037,6 @@ def main():
             st.info("🤖 Análise realizada com IA (Llama 3)")
         else:
             st.info("📋 Análise local (modo offline)")
-        # ============================================
         
         # Caixa de resultado
         st.markdown("""
