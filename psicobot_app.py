@@ -26,7 +26,7 @@ from io import BytesIO
 # ============================================
 # CHAVE DA API GROQ (HARDCODED - FUNCIONA IMEDIATAMENTE)
 # ============================================
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "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"
 # ============================================
 
 # Configuração da página
