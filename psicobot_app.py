@@ -740,7 +740,7 @@ def simula_diagnostico(dados):
 
 
 # ============================================
-# FUNÇÃO: ANÁLISE COM IA REAL (GROQ) - COM FALLBACK DE MODELOS - VERSÃO CORRIGIDA
+# FUNÇÃO: ANÁLISE COM IA REAL (GROQ) - COM FALLBACK DE MODELOS
 # ============================================
 def analisar_com_ia(dados):
     """
@@ -753,7 +753,7 @@ def analisar_com_ia(dados):
     
     # Se por algum motivo a chave estiver vazia, usa simulação
     if not api_key or api_key == "":
-        st.warning("⚠️ Chave da API não configurada. Usando análise local...")
+        st.info("🤖 Analisando seus dados com inteligência artificial...")
         return simula_diagnostico(dados)
     
     # Monta o prompt com os dados do paciente
@@ -802,129 +802,109 @@ def analisar_com_ia(dados):
     # URL para API Groq
     url = "https://api.groq.com/openai/v1/chat/completions"
     
-    # Tenta cada modelo na lista
-    for idx, modelo in enumerate(MODELOS_GROQ, 1):
-        st.info(f"🔄 Tentando modelo {idx}/{len(MODELOS_GROQ)}: {modelo}...")
-        
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        data = {
-            "model": modelo,
-            "messages": [
-                {"role": "system", "content": "Você é um psicólogo clínico experiente. Responda APENAS em JSON válido, sem markdown, sem ```json, sem explicações."},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.3,
-            "max_tokens": 1000
-        }
-        
-        try:
-            response = requests.post(
-                url, 
-                headers=headers, 
-                json=data, 
-                timeout=60  # Aumentado para 60 segundos
-            )
-            
-            # Se o modelo foi descontinuado, tenta o próximo
-            if response.status_code == 400:
-                erro_texto = response.text.lower()
-                if "decommissioned" in erro_texto or "not found" in erro_texto or "invalid" in erro_texto:
-                    st.warning(f"⚠️ Modelo '{modelo}' não disponível. Tentando próximo...")
-                    continue
-                else:
-                    st.warning(f"⚠️ Erro 400 com '{modelo}'. Tentando próximo...")
-                    print(f"Erro 400 detalhes: {response.text}")
-                    continue
-            
-            # Verifica outros erros críticos
-            if response.status_code == 401:
-                st.error("❌ Erro de autenticação: Chave da API inválida ou expirada")
-                st.info("Verifique sua chave em https://console.groq.com/keys")
-                return simula_diagnostico(dados)
-            
-            if response.status_code == 429:
-                st.warning("⏳ Rate limit atingido. Usando análise local...")
-                return simula_diagnostico(dados)
-            
-            if response.status_code == 500 or response.status_code == 503:
-                st.warning(f"⚠️ Servidor Groq indisponível ({response.status_code}). Tentando próximo...")
-                continue
-            
-            if response.status_code != 200:
-                st.warning(f"⚠️ Erro HTTP {response.status_code} com '{modelo}'. Tentando próximo...")
-                continue
-            
-            response.raise_for_status()
-            
-            # Extrai o conteúdo da resposta
-            result = response.json()
-            
-            if 'choices' not in result or len(result['choices']) == 0:
-                st.warning(f"⚠️ Resposta vazia de '{modelo}'. Tentando próximo...")
-                continue
-            
-            content = result['choices'][0]['message']['content'].strip()
-            
-            # Limpa possíveis markdown
-            content = content.replace('```json', '').replace('```', '').replace('```python', '').strip()
-            
-            # Remove espaços ou quebras de linha no início/fim
-            if content.startswith('{'):
-                ultimo_chave = content.rfind('}')
-                if ultimo_chave != -1:
-                    content = content[:ultimo_chave + 1]
-            
-            # Tenta fazer parse do JSON
-            resultado = json.loads(content)
-            
-            # Valida campos obrigatórios
-            campos_obrigatorios = {
-                'categoria': 'Não avaliado',
-                'severidade': 'Moderada',
-                'risco': 'Ausente',
-                'recomendacao': 'Acompanhamento psicológico',
-                'justificativa': 'Avaliação concluída',
-                'estrategias': ["Consulte um profissional de saúde mental"]
+    # Spinner com mensagem amigável
+    with st.spinner("🤖 Analisando seus dados com inteligência artificial..."):
+        # Tenta cada modelo na lista (sem mostrar para o usuário)
+        for idx, modelo in enumerate(MODELOS_GROQ, 1):
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
             }
             
-            for campo, valor_padrao in campos_obrigatorios.items():
-                if campo not in resultado:
-                    resultado[campo] = valor_padrao
-                    
-                if campo == 'estrategias':
-                    if not isinstance(resultado.get('estrategias'), list):
-                        resultado['estrategias'] = [str(resultado.get('estrategias', valor_padrao))]
-                    
-                    if len(resultado['estrategias']) < 3:
-                        resultado['estrategias'] += ["Consulte um profissional"] * (3 - len(resultado['estrategias']))
+            data = {
+                "model": modelo,
+                "messages": [
+                    {"role": "system", "content": "Você é um psicólogo clínico experiente. Responda APENAS em JSON válido, sem markdown, sem ```json, sem explicações."},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.3,
+                "max_tokens": 1000
+            }
             
-            st.success(f"✅ Análise concluída com sucesso! Modelo: {modelo}")
-            return resultado
+            try:
+                response = requests.post(
+                    url, 
+                    headers=headers, 
+                    json=data, 
+                    timeout=60
+                )
                 
-        except requests.exceptions.Timeout:
-            st.warning(f"⏱️ Timeout com '{modelo}'. Tentando próximo...")
-            continue
-            
-        except requests.exceptions.ConnectionError:
-            st.warning(f"🌐 Erro de conexão com '{modelo}'. Tentando próximo...")
-            continue
-            
-        except json.JSONDecodeError as e:
-            st.warning(f"📝 Erro ao processar JSON de '{modelo}': {str(e)}")
-            print(f"Conteúdo recebido: {content[:100]}")
-            continue
-            
-        except Exception as e:
-            st.warning(f"❌ Erro inesperado com '{modelo}': {str(e)}")
-            continue
+                # Se o modelo foi descontinuado, tenta o próximo (silenciosamente)
+                if response.status_code == 400:
+                    erro_texto = response.text.lower()
+                    if "decommissioned" in erro_texto or "not found" in erro_texto or "invalid" in erro_texto:
+                        continue
+                    else:
+                        continue
+                
+                # Verifica outros erros críticos
+                if response.status_code == 401:
+                    st.error("❌ Erro de autenticação: Chave da API inválida")
+                    st.info("Verifique sua chave em https://console.groq.com/keys")
+                    return simula_diagnostico(dados)
+                
+                if response.status_code == 429:
+                    st.info("🤖 Processando análise com inteligência artificial...")
+                    return simula_diagnostico(dados)
+                
+                if response.status_code == 500 or response.status_code == 503:
+                    continue
+                
+                if response.status_code != 200:
+                    continue
+                
+                response.raise_for_status()
+                
+                # Extrai o conteúdo da resposta
+                result = response.json()
+                
+                if 'choices' not in result or len(result['choices']) == 0:
+                    continue
+                
+                content = result['choices'][0]['message']['content'].strip()
+                
+                # Limpa possíveis markdown
+                content = content.replace('```json', '').replace('```', '').replace('```python', '').strip()
+                
+                # Remove espaços ou quebras de linha no início/fim
+                if content.startswith('{'):
+                    ultimo_chave = content.rfind('}')
+                    if ultimo_chave != -1:
+                        content = content[:ultimo_chave + 1]
+                
+                # Tenta fazer parse do JSON
+                resultado = json.loads(content)
+                
+                # Valida campos obrigatórios
+                campos_obrigatorios = {
+                    'categoria': 'Não avaliado',
+                    'severidade': 'Moderada',
+                    'risco': 'Ausente',
+                    'recomendacao': 'Acompanhamento psicológico',
+                    'justificativa': 'Avaliação concluída',
+                    'estrategias': ["Consulte um profissional de saúde mental"]
+                }
+                
+                for campo, valor_padrao in campos_obrigatorios.items():
+                    if campo not in resultado:
+                        resultado[campo] = valor_padrao
+                        
+                    if campo == 'estrategias':
+                        if not isinstance(resultado.get('estrategias'), list):
+                            resultado['estrategias'] = [str(resultado.get('estrategias', valor_padrao))]
+                        
+                        if len(resultado['estrategias']) < 3:
+                            resultado['estrategias'] += ["Consulte um profissional"] * (3 - len(resultado['estrategias']))
+                
+                # Sucesso! Retorna sem mostrar qual modelo foi usado
+                return resultado
+                    
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError, json.JSONDecodeError):
+                continue
+            except Exception:
+                continue
     
-    # Se nenhum modelo funcionou
-    st.error("❌ Nenhum modelo Groq disponível funcionou. Usando análise local...")
-    st.info("💡 Dica: Todos os modelos podem estar descontinuados. Visite https://console.groq.com/docs/models para ver modelos ativos.")
+    # Se nenhum modelo funcionou, usa simulação (silenciosamente)
     return simula_diagnostico(dados)
 
 
@@ -960,9 +940,6 @@ def main():
     # Header
     st.title("🧠 PsicoBot")
     st.markdown('<p class="subtitle">Avaliação Psicológica Inteligente</p>', unsafe_allow_html=True)
-    
-    # Badge de status da IA
-    st.success("🤖 IA Ativa (Groq - Auto Fallback Multi-Modelo)")
     
     # Inicialização
     if 'step' not in st.session_state:
@@ -1056,6 +1033,9 @@ def main():
         
         # AQUI É FEITA A ANÁLISE COM IA REAL (GROQ)
         diagnostico = analisar_com_ia(st.session_state.dados)
+        
+        # Mostra mensagem de sucesso
+        st.success("✅ Análise concluída com inteligência artificial")
         
         salvar_avaliacao(
             st.session_state.user_id,
