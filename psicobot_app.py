@@ -27,6 +27,14 @@ from io import BytesIO
 # CHAVE DA API GROQ (HARDCODED - FUNCIONA IMEDIATAMENTE)
 # ============================================
 GROQ_API_KEY = "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"
+
+# LISTA DE MODELOS PARA TENTAR (MODELOS ATIVOS DO GROQ - FEVEREIRO 2026)
+MODELOS_GROQ = [
+    "llama-3.3-70b-versatile",      # ✅ Novo modelo ativo (Fevereiro 2026)
+    "llama-3.1-8b-instant",         # ✅ Modelo leve ativo
+    "mixtral-8x7b-32768",           # ✅ Modelo alternativo ativo
+    "gemma-7b-it",                  # ✅ Google Gemma
+]
 # ============================================
 
 # Configuração da página
@@ -732,14 +740,15 @@ def simula_diagnostico(dados):
 
 
 # ============================================
-# NOVA FUNÇÃO: ANÁLISE COM IA REAL (GROQ) - CHAVE HARDCODED
+# FUNÇÃO: ANÁLISE COM IA REAL (GROQ) - COM FALLBACK DE MODELOS - VERSÃO CORRIGIDA
 # ============================================
 def analisar_com_ia(dados):
     """
     Analisa os dados do paciente usando IA real (Groq API)
-    CHAVE HARDCODED - FUNCIONA IMEDIATAMENTE SEM CONFIGURAR SECRETS
+    COM SISTEMA DE FALLBACK AUTOMÁTICO DE MODELOS
+    MODELOS ATIVOS - FEVEREIRO 2026
     """
-    # Usa chave hardcoded (funciona imediatamente, sem precisar de Secrets)
+    # Usa chave hardcoded
     api_key = GROQ_API_KEY
     
     # Se por algum motivo a chave estiver vazia, usa simulação
@@ -790,58 +799,133 @@ def analisar_com_ia(dados):
     }}
     """
     
-    # Chama a API do Groq
+    # URL para API Groq
     url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
     
-    data = {
-        "model": "llama3-8b-8192",
-        "messages": [
-            {"role": "system", "content": "Você é um psicólogo clínico experiente. Responda apenas em JSON válido, sem markdown."},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.4,
-        "max_tokens": 1200
-    }
-    
-    try:
-        with st.spinner("🧠 Analisando com IA..."):
-            response = requests.post(url, headers=headers, json=data, timeout=45)
+    # Tenta cada modelo na lista
+    for idx, modelo in enumerate(MODELOS_GROQ, 1):
+        st.info(f"🔄 Tentando modelo {idx}/{len(MODELOS_GROQ)}: {modelo}...")
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "model": modelo,
+            "messages": [
+                {"role": "system", "content": "Você é um psicólogo clínico experiente. Responda APENAS em JSON válido, sem markdown, sem ```json, sem explicações."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.3,
+            "max_tokens": 1000
+        }
+        
+        try:
+            response = requests.post(
+                url, 
+                headers=headers, 
+                json=data, 
+                timeout=60  # Aumentado para 60 segundos
+            )
+            
+            # Se o modelo foi descontinuado, tenta o próximo
+            if response.status_code == 400:
+                erro_texto = response.text.lower()
+                if "decommissioned" in erro_texto or "not found" in erro_texto or "invalid" in erro_texto:
+                    st.warning(f"⚠️ Modelo '{modelo}' não disponível. Tentando próximo...")
+                    continue
+                else:
+                    st.warning(f"⚠️ Erro 400 com '{modelo}'. Tentando próximo...")
+                    print(f"Erro 400 detalhes: {response.text}")
+                    continue
+            
+            # Verifica outros erros críticos
+            if response.status_code == 401:
+                st.error("❌ Erro de autenticação: Chave da API inválida ou expirada")
+                st.info("Verifique sua chave em https://console.groq.com/keys")
+                return simula_diagnostico(dados)
+            
+            if response.status_code == 429:
+                st.warning("⏳ Rate limit atingido. Usando análise local...")
+                return simula_diagnostico(dados)
+            
+            if response.status_code == 500 or response.status_code == 503:
+                st.warning(f"⚠️ Servidor Groq indisponível ({response.status_code}). Tentando próximo...")
+                continue
+            
+            if response.status_code != 200:
+                st.warning(f"⚠️ Erro HTTP {response.status_code} com '{modelo}'. Tentando próximo...")
+                continue
+            
             response.raise_for_status()
             
             # Extrai o conteúdo da resposta
-            content = response.json()['choices'][0]['message']['content']
+            result = response.json()
+            
+            if 'choices' not in result or len(result['choices']) == 0:
+                st.warning(f"⚠️ Resposta vazia de '{modelo}'. Tentando próximo...")
+                continue
+            
+            content = result['choices'][0]['message']['content'].strip()
             
             # Limpa possíveis markdown
-            content = content.replace('```json', '').replace('```', '').strip()
+            content = content.replace('```json', '').replace('```', '').replace('```python', '').strip()
+            
+            # Remove espaços ou quebras de linha no início/fim
+            if content.startswith('{'):
+                ultimo_chave = content.rfind('}')
+                if ultimo_chave != -1:
+                    content = content[:ultimo_chave + 1]
             
             # Tenta fazer parse do JSON
             resultado = json.loads(content)
             
             # Valida campos obrigatórios
-            campos_obrigatorios = ['categoria', 'severidade', 'risco', 'recomendacao', 'estrategias']
-            for campo in campos_obrigatorios:
+            campos_obrigatorios = {
+                'categoria': 'Não avaliado',
+                'severidade': 'Moderada',
+                'risco': 'Ausente',
+                'recomendacao': 'Acompanhamento psicológico',
+                'justificativa': 'Avaliação concluída',
+                'estrategias': ["Consulte um profissional de saúde mental"]
+            }
+            
+            for campo, valor_padrao in campos_obrigatorios.items():
                 if campo not in resultado:
-                    resultado[campo] = "Não avaliado" if campo != 'estrategias' else ["Consulte um profissional"]
+                    resultado[campo] = valor_padrao
+                    
+                if campo == 'estrategias':
+                    if not isinstance(resultado.get('estrategias'), list):
+                        resultado['estrategias'] = [str(resultado.get('estrategias', valor_padrao))]
+                    
+                    if len(resultado['estrategias']) < 3:
+                        resultado['estrategias'] += ["Consulte um profissional"] * (3 - len(resultado['estrategias']))
             
-            # Garante que estrategias é uma lista
-            if not isinstance(resultado.get('estrategias'), list):
-                resultado['estrategias'] = [str(resultado.get('estrategias', 'Consulte um profissional'))]
-            
+            st.success(f"✅ Análise concluída com sucesso! Modelo: {modelo}")
             return resultado
+                
+        except requests.exceptions.Timeout:
+            st.warning(f"⏱️ Timeout com '{modelo}'. Tentando próximo...")
+            continue
             
-    except requests.exceptions.RequestException as e:
-        st.warning("⚠️ Erro de conexão com IA. Usando análise local...")
-        return simula_diagnostico(dados)
-    except json.JSONDecodeError as e:
-        st.warning("⚠️ Erro ao processar resposta da IA. Usando análise local...")
-        return simula_diagnostico(dados)
-    except Exception as e:
-        st.warning(f"⚠️ Erro inesperado. Usando análise local...")
-        return simula_diagnostico(dados)
+        except requests.exceptions.ConnectionError:
+            st.warning(f"🌐 Erro de conexão com '{modelo}'. Tentando próximo...")
+            continue
+            
+        except json.JSONDecodeError as e:
+            st.warning(f"📝 Erro ao processar JSON de '{modelo}': {str(e)}")
+            print(f"Conteúdo recebido: {content[:100]}")
+            continue
+            
+        except Exception as e:
+            st.warning(f"❌ Erro inesperado com '{modelo}': {str(e)}")
+            continue
+    
+    # Se nenhum modelo funcionou
+    st.error("❌ Nenhum modelo Groq disponível funcionou. Usando análise local...")
+    st.info("💡 Dica: Todos os modelos podem estar descontinuados. Visite https://console.groq.com/docs/models para ver modelos ativos.")
+    return simula_diagnostico(dados)
 
 
 def salvar_avaliacao(user_id, dados, diagnostico):
@@ -877,8 +961,8 @@ def main():
     st.title("🧠 PsicoBot")
     st.markdown('<p class="subtitle">Avaliação Psicológica Inteligente</p>', unsafe_allow_html=True)
     
-    # Badge de status da IA (sempre ativa com chave hardcoded)
-    st.success("🤖 IA Ativa (Groq/Llama 3)")
+    # Badge de status da IA
+    st.success("🤖 IA Ativa (Groq - Auto Fallback Multi-Modelo)")
     
     # Inicialização
     if 'step' not in st.session_state:
@@ -971,14 +1055,13 @@ def main():
         st.success("✅ Triagem concluída com sucesso!")
         
         # AQUI É FEITA A ANÁLISE COM IA REAL (GROQ)
-        with st.spinner("Analisando padrões clínicos..."):
-            diagnostico = analisar_com_ia(st.session_state.dados)
-            
-            salvar_avaliacao(
-                st.session_state.user_id,
-                st.session_state.dados,
-                diagnostico
-            )
+        diagnostico = analisar_com_ia(st.session_state.dados)
+        
+        salvar_avaliacao(
+            st.session_state.user_id,
+            st.session_state.dados,
+            diagnostico
+        )
         
         # Caixa de resultado
         st.markdown("""
